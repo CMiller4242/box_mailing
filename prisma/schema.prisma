@@ -1,0 +1,360 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+// Top-level job status — coarse-grained, always readable at a glance
+enum JobStatus {
+  DRAFT            // created but not yet submitted for work
+  ACTIVE           // in progress, internal team owns the next action
+  WAITING_EXTERNAL // blocked on a third-party vendor (e.g. name verification)
+  ON_HOLD          // intentionally paused (budget, data problem, etc.)
+  COMPLETED
+  CANCELLED
+}
+
+// Finer-grained signal about who is blocking progress on the current stage
+enum BlockerType {
+  NONE
+  INTERNAL   // needs action from someone on our team
+  VENDOR     // sent to vendor, waiting on return
+}
+
+enum VendorTaskStatus {
+  PENDING           // not yet sent
+  SENT_TO_VENDOR
+  RECEIVED_FROM_VENDOR
+  OVERDUE           // expectedReturnDate has passed without receivedAt
+}
+
+enum FileStorageProvider {
+  LOCAL
+  S3
+  AZURE_BLOB
+  SHAREPOINT
+}
+
+// What event causes a notification to fire
+enum NotificationTriggerType {
+  STAGE_OVERDUE          // job has exceeded stage SLA
+  DUE_DATE_APPROACHING   // overall due date is within offsetHours
+  VENDOR_TASK_OVERDUE    // vendor hasn't returned by expectedReturnDate
+  JOB_STALLED            // no activity on an ACTIVE job for N hours
+  MILESTONE_DUE          // a ScheduleMilestone is approaching
+}
+
+enum AuditAction {
+  CREATED
+  UPDATED
+  DELETED
+  STAGE_TRANSITIONED
+  FILE_UPLOADED
+  FILE_APPROVED
+  COMMENT_ADDED
+  VENDOR_TASK_SENT
+  VENDOR_TASK_RECEIVED
+  ASSIGNED
+  STATUS_CHANGED
+}
+
+// ─── Users & Teams ────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      UserRole @default(STAFF)
+  isActive  Boolean  @default(true)
+  teamId    String?
+  team      Team?    @relation(fields: [teamId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requestedJobs    MailingJob[]      @relation("JobRequestedBy")
+  assignedJobs     MailingJob[]      @relation("JobAssignedTo")
+  stageTransitions JobStageHistory[] @relation("StageTransitionedBy")
+  stageAssignments JobStageHistory[] @relation("StageAssignee")
+  comments         JobComment[]
+  uploadedFiles    JobFile[]
+  milestones       ScheduleMilestone[]
+  auditLogs        AuditLog[]
+
+  @@map("users")
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members User[]
+  jobs    MailingJob[]
+
+  @@map("teams")
+}
+
+// ─── Workflow Stage Definitions ───────────────────────────────────────────────
+//
+// Stages are data-driven so new steps can be added or reordered without a
+// schema migration. The 8 current steps are seeded as rows, not hard-coded.
+
+model WorkflowStage {
+  id             String  @id @default(cuid())
+  name           String  @unique
+  description    String?
+  // Controls ordering in the UI and default transition direction
+  sequence       Int     @unique
+  // Logical grouping label: "Data Acquisition", "List Processing", "Fulfillment"
+  phaseGroup     String?
+  // True when the expected action is performed by an external vendor
+  isExternalStep Boolean @default(false)
+  // Expected maximum calendar days to complete this stage — used for SLA alerts
+  slaDays        Int?
+  isActive       Boolean @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  currentJobs    MailingJob[]
+  stageHistories JobStageHistory[]
+  files          JobFile[]
+  vendorTasks    VendorTask[]
+
+  @@map("workflow_stages")
+}
+
+// ─── Mailing Job ──────────────────────────────────────────────────────────────
+
+model MailingJob {
+  id          String      @id @default(cuid())
+  title       String
+  description String?
+  jobStatus   JobStatus   @default(DRAFT)
+  blockerType BlockerType @default(NONE)
+
+  // When the physical mailing must drop
+  targetMailDate DateTime?
+  // Hard deadline the whole job must complete by (may differ from targetMailDate)
+  overallDueDate DateTime?
+  requestedDate  DateTime  @default(now())
+
+  // Ownership
+  requestedById String
+  requestedBy   User    @relation("JobRequestedBy", fields: [requestedById], references: [id])
+  assignedToId  String?
+  assignedTo    User?   @relation("JobAssignedTo", fields: [assignedToId], references: [id])
+  teamId        String?
+  team          Team?   @relation(fields: [teamId], references: [id])
+
+  // Current stage — denormalized for fast dashboard queries.
+  // JobStageHistory is the authoritative source; this is a pointer to the latest open row.
+  currentStageId   String?
+  currentStage     WorkflowStage? @relation(fields: [currentStageId], references: [id])
+  stageEnteredAt   DateTime?
+  // Derived SLA deadline for the current stage: stageEnteredAt + currentStage.slaDays
+  currentStageDueDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stageHistories JobStageHistory[]
+  comments       JobComment[]
+  files          JobFile[]
+  milestones     ScheduleMilestone[]
+  vendorTasks    VendorTask[]
+  auditLogs      AuditLog[]
+
+  @@map("mailing_jobs")
+}
+
+// ─── Stage Transition History ─────────────────────────────────────────────────
+//
+// One row per stage visit. exitedAt = null means this is the current open stage.
+// durationMinutes is computed and stored on exit to make analytics queries cheap.
+
+model JobStageHistory {
+  id      String     @id @default(cuid())
+  jobId   String
+  job     MailingJob @relation(fields: [jobId], references: [id])
+  stageId String
+  stage   WorkflowStage @relation(fields: [stageId], references: [id])
+
+  enteredAt       DateTime  @default(now())
+  exitedAt        DateTime?
+  durationMinutes Int?      // populated when exitedAt is set
+
+  // Who owned this job while it was in this stage
+  assignedToId String?
+  assignedTo   User?  @relation("StageAssignee", fields: [assignedToId], references: [id])
+
+  // Who performed the transition into this stage
+  transitionedById String?
+  transitionedBy   User?   @relation("StageTransitionedBy", fields: [transitionedById], references: [id])
+
+  // Context note written at the time of transition
+  transitionNote String?
+
+  @@map("job_stage_histories")
+}
+
+// ─── Comments / Notes ─────────────────────────────────────────────────────────
+
+model JobComment {
+  id         String     @id @default(cuid())
+  jobId      String
+  job        MailingJob @relation(fields: [jobId], references: [id])
+  authorId   String
+  author     User       @relation(fields: [authorId], references: [id])
+  content    String
+  // Reserved for future: distinguish internal ops notes from vendor-facing notes
+  isInternal Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@map("job_comments")
+}
+
+// ─── Files ────────────────────────────────────────────────────────────────────
+//
+// Stores metadata and a storage key — binary content lives in the provider.
+// Versioning: a revised file sets parentFileId to the original and increments
+// version. The latest revision for a given parentFileId has isLatest = true.
+
+model JobFile {
+  id              String              @id @default(cuid())
+  jobId           String
+  job             MailingJob          @relation(fields: [jobId], references: [id])
+  // Optional: pin file to the stage where it was produced
+  stageId         String?
+  stage           WorkflowStage?      @relation(fields: [stageId], references: [id])
+
+  displayName     String
+  storageKey      String              // path or object key in the storage provider
+  storageProvider FileStorageProvider @default(LOCAL)
+  mimeType        String?
+  sizeBytes       BigInt?
+
+  // Versioning chain — new upload replaces previous; old row stays for audit
+  parentFileId String?
+  parentFile   JobFile?  @relation("FileRevisions", fields: [parentFileId], references: [id])
+  revisions    JobFile[] @relation("FileRevisions")
+  version      Int       @default(1)
+  isLatest     Boolean   @default(true)
+
+  isApproved   Boolean   @default(false)
+  approvedAt   DateTime?
+
+  uploadedById String
+  uploadedBy   User      @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("job_files")
+}
+
+// ─── Schedule Milestones ──────────────────────────────────────────────────────
+//
+// Discrete checkpoints within a job with their own due dates.
+// Examples: "Data pull by", "Send to vendor by", "Labels printed by".
+
+model ScheduleMilestone {
+  id           String     @id @default(cuid())
+  jobId        String
+  job          MailingJob @relation(fields: [jobId], references: [id])
+  label        String
+  dueDate      DateTime
+  completedAt  DateTime?
+  assignedToId String?
+  assignedTo   User?      @relation(fields: [assignedToId], references: [id])
+  notes        String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@map("schedule_milestones")
+}
+
+// ─── Vendor Tasks ─────────────────────────────────────────────────────────────
+//
+// Tracks discrete units of work sent to external vendors.
+// The primary use case is name verification, but the model is generic.
+
+model VendorTask {
+  id                 String           @id @default(cuid())
+  jobId              String
+  job                MailingJob       @relation(fields: [jobId], references: [id])
+  stageId            String?
+  stage              WorkflowStage?   @relation(fields: [stageId], references: [id])
+
+  vendorName         String
+  description        String
+  taskStatus         VendorTaskStatus @default(PENDING)
+
+  sentAt             DateTime?
+  expectedReturnDate DateTime?
+  receivedAt         DateTime?
+
+  // Record what came back
+  returnNotes        String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@map("vendor_tasks")
+}
+
+// ─── Notification Rules (stub) ────────────────────────────────────────────────
+//
+// Rules are evaluated by a future scheduler job. Stored as data so ops can
+// configure thresholds without a code deploy.
+
+model NotificationRule {
+  id            String                  @id @default(cuid())
+  name          String
+  description   String?
+  triggerType   NotificationTriggerType
+  // Positive = after the event, negative = before (e.g. -48 = 2 days before due)
+  offsetHours   Int
+  // "ASSIGNEE" | "REQUESTER" | "TEAM" | "MANAGER" — kept as string for flexibility
+  recipientType String
+  isActive      Boolean                 @default(true)
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@map("notification_rules")
+}
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+//
+// Separate from JobStageHistory. Records all significant mutations across all
+// entities so the "what changed in the last 7 days" query is a single scan.
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  // Which model was changed
+  entityType  String
+  entityId    String
+  action      AuditAction
+  // Always link to the parent job when possible for efficient per-job filtering
+  jobId       String?
+  job         MailingJob? @relation(fields: [jobId], references: [id])
+  changedById String?
+  changedBy   User?       @relation(fields: [changedById], references: [id])
+  // JSON snapshots of changed fields only — not full row copies
+  previousValue Json?
+  newValue      Json?
+  createdAt   DateTime    @default(now())
+
+  @@map("audit_logs")
+}
