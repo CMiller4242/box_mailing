@@ -262,50 +262,68 @@ tbody td {
 .meta-value { font-size: 13px; color: var(--text); }
 .meta-value.muted { color: var(--text-muted); }
 
-/* ── Stage progress strip ────────────────────────────────────────────────── */
-.stage-strip {
+/* ── Workflow progress track ─────────────────────────────────────────────── */
+.progress-track {
   display: flex;
-  align-items: center;
-  gap: 0;
-  overflow-x: auto;
-  padding: 16px 18px;
+  align-items: flex-start;
+  padding: 20px 20px 18px;
+  min-width: max-content;
 }
-.stage-step {
+.progress-step-wrap {
   display: flex;
+  align-items: flex-start;
+}
+.progress-connector {
+  flex-shrink: 0;
+  width: 36px;
+  height: 2px;
+  background: var(--border);
+  margin-top: 15px; /* vertically centers the 2px line against the 32px dot */
+}
+.progress-connector.done { background: var(--success); }
+.progress-step {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0;
+  width: 96px;
   flex-shrink: 0;
 }
-.stage-dot {
-  width: 28px; height: 28px;
+.progress-dot {
+  width: 32px; height: 32px;
   border-radius: 50%;
   border: 2px solid var(--border-strong);
   background: var(--surface);
   display: flex; align-items: center; justify-content: center;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--text-muted);
-  position: relative;
   flex-shrink: 0;
 }
-.stage-dot.done { background: var(--success); border-color: var(--success); color: #fff; }
-.stage-dot.current { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 0 0 3px rgba(37,99,235,0.2); }
-.stage-connector { width: 28px; height: 2px; background: var(--border); flex-shrink: 0; }
-.stage-connector.done { background: var(--success); }
-.stage-label {
-  position: absolute;
-  top: 32px;
-  left: 50%;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  font-size: 10px;
-  color: var(--text-muted);
-  font-weight: 500;
-  pointer-events: none;
+.progress-step.done .progress-dot {
+  background: var(--success); border-color: var(--success); color: #fff;
 }
-.stage-label.current { color: var(--accent); font-weight: 700; }
-.stage-strip-wrap { overflow-x: auto; border-bottom: 1px solid var(--border); }
-.stage-strip-labels { position: relative; height: 34px; }
+.progress-step.current .progress-dot {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15);
+}
+.progress-label {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+  color: var(--text-muted);
+  max-width: 88px;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+.progress-step.done .progress-label { color: #15803d; }
+.progress-step.current .progress-label { color: var(--accent); font-weight: 700; }
+.progress-phase {
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--text-faint);
+  text-align: center;
+}
 
 /* ── History list ────────────────────────────────────────────────────────── */
 .history-list { display: flex; flex-direction: column; gap: 0; }
@@ -365,6 +383,57 @@ tbody td {
 .file-name { font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .file-meta { font-size: 11px; color: var(--text-muted); }
 .file-approved { font-size: 11px; font-weight: 600; color: var(--success); }
+
+/* ── File upload zone ────────────────────────────────────────────────────── */
+.upload-zone {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: #f8fafc;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+.upload-file-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.upload-file-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.upload-file-btn:hover { background: #f1f5f9; }
+.upload-selected-name {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.upload-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-style: italic;
+}
+.acting-as {
+  font-size: 11px;
+  color: var(--text-faint);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 
 /* ── Empty state ─────────────────────────────────────────────────────────── */
 .empty {

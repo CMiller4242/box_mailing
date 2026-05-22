@@ -3,6 +3,7 @@ import { BlockerBadge, StatusBadge } from '../components/StatusBadge';
 import { CommentsPanel } from '../components/CommentsPanel';
 import { FilesPanel } from '../components/FilesPanel';
 import { StageTransitionPanel } from '../components/StageTransitionPanel';
+import { WorkflowProgress } from '../components/WorkflowProgress';
 import { useJob } from '../hooks/useJob';
 import { useStages } from '../hooks/useStages';
 import { formatDate, formatDateTime, formatDuration } from '../utils/format';
@@ -43,55 +44,27 @@ export function JobDetailPage() {
         </div>
       </div>
 
-      {/* Stage progress strip */}
+      {/* Workflow progress — redesigned for readability */}
       {allStages && allStages.length > 0 && (
-        <div className="card" style={{ marginBottom: 20, overflowX: 'auto' }}>
-          <div style={{ padding: '16px 20px 24px', position: 'relative' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 16 }}>
-              Workflow Progress
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-              {allStages.map((stage, i) => {
-                const done = stage.sequence < currentSeq;
-                const current = stage.sequence === currentSeq;
-                return (
-                  <div key={stage.id} style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-                    {i > 0 && (
-                      <div
-                        style={{
-                          width: 32,
-                          height: 2,
-                          background: done || current ? (done ? 'var(--success)' : 'var(--accent)') : 'var(--border)',
-                          flexShrink: 0,
-                        }}
-                      />
-                    )}
-                    <div style={{ position: 'relative', textAlign: 'center' }}>
-                      <div
-                        className={`stage-dot${done ? ' done' : current ? ' current' : ''}`}
-                        title={stage.name}
-                      >
-                        {done ? '✓' : stage.sequence}
-                      </div>
-                      <div
-                        className={`stage-label${current ? ' current' : ''}`}
-                        style={{ maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis' }}
-                        title={stage.name}
-                      >
-                        {stage.name}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header">
+            <span className="card-title">Workflow Progress</span>
+            {job.currentStage && (
+              <span className="text-muted text-sm">
+                Step {job.currentStage.sequence} of {allStages.length}: {job.currentStage.name}
+              </span>
+            )}
           </div>
+          <WorkflowProgress
+            stages={allStages}
+            currentStageSequence={currentSeq}
+          />
         </div>
       )}
 
       {/* Main detail grid */}
       <div className="detail-grid">
-        {/* Left: metadata + history + comments + files */}
+        {/* Left column */}
         <div className="detail-main">
           {/* Job metadata */}
           <div className="card">
@@ -140,7 +113,7 @@ export function JobDetailPage() {
             </div>
           </div>
 
-          {/* Vendor tasks if any */}
+          {/* Vendor tasks */}
           {job.vendorTasks.length > 0 && (
             <div className="card">
               <div className="card-header">
@@ -179,11 +152,12 @@ export function JobDetailPage() {
             </div>
           )}
 
-          {/* Stage history */}
+          {/* Stage history — shows who performed each transition */}
           {job.stageHistories.length > 0 && (
             <div className="card">
               <div className="card-header">
                 <span className="card-title">Stage History</span>
+                <span className="text-muted text-sm">{job.stageHistories.length} transitions</span>
               </div>
               <div className="card-body" style={{ padding: '0 18px' }}>
                 <div className="history-list">
@@ -191,8 +165,13 @@ export function JobDetailPage() {
                     <div key={h.id} className="history-row">
                       <div>
                         <div className="history-stage">{h.stage.name}</div>
+                        {h.transitionedBy && (
+                          <div className="text-sm" style={{ color: 'var(--accent)', marginTop: 1 }}>
+                            by {h.transitionedBy.name}
+                          </div>
+                        )}
                         {h.assignedTo && (
-                          <div className="text-sm text-muted">{h.assignedTo.name}</div>
+                          <div className="text-sm text-muted">→ {h.assignedTo.name}</div>
                         )}
                       </div>
                       <div className="history-note">
@@ -213,7 +192,7 @@ export function JobDetailPage() {
             </div>
           )}
 
-          {/* Milestones if any */}
+          {/* Milestones */}
           {job.milestones.length > 0 && (
             <div className="card">
               <div className="card-header">
@@ -253,10 +232,10 @@ export function JobDetailPage() {
           )}
 
           <CommentsPanel jobId={job.id} comments={job.comments} />
-          <FilesPanel files={job.files} />
+          <FilesPanel jobId={job.id} files={job.files} />
         </div>
 
-        {/* Right sidebar: stage panel */}
+        {/* Right sidebar */}
         <div className="detail-sidebar">
           <StageTransitionPanel
             jobId={job.id}

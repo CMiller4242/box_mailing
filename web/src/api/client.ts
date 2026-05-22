@@ -1,7 +1,9 @@
 import type {
   AddCommentPayload,
+  AddFilePayload,
   CreateJobPayload,
   JobComment,
+  JobFile,
   MailingJobDetail,
   MailingJobSummary,
   StageHistory,
@@ -72,6 +74,14 @@ export const api = {
       request<JobComment[]>(`/mailing-jobs/${jobId}/comments`),
     add: (jobId: string, body: AddCommentPayload) =>
       request<JobComment>(`/mailing-jobs/${jobId}/comments`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+  },
+
+  files: {
+    add: (jobId: string, body: AddFilePayload) =>
+      request<JobFile>(`/mailing-jobs/${jobId}/files`, {
         method: 'POST',
         body: JSON.stringify(body),
       }),

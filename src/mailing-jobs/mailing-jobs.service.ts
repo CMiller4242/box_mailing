@@ -78,7 +78,11 @@ export class MailingJobsService {
       include: {
         ...JOB_INCLUDE,
         stageHistories: {
-          include: { stage: true, assignedTo: true },
+          include: {
+            stage: true,
+            assignedTo: { select: { id: true, name: true } },
+            transitionedBy: { select: { id: true, name: true } },
+          },
           orderBy: { enteredAt: 'asc' },
         },
         comments: {

@@ -143,6 +143,16 @@ export interface CreateJobPayload {
 export interface TransitionPayload {
   targetStageId: string;
   transitionNote?: string;
+  transitionedById?: string;
+}
+
+export interface AddFilePayload {
+  displayName: string;
+  storageKey: string;
+  mimeType?: string;
+  sizeBytes?: string;
+  uploadedById: string;
+  stageId?: string;
 }
 
 export interface AddCommentPayload {
