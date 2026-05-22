@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AppController } from './app.controller';
 import { CommentsModule } from './comments/comments.module';
 import { FilesModule } from './files/files.module';
 import { MailingJobsModule } from './mailing-jobs/mailing-jobs.module';
@@ -15,5 +16,6 @@ import { WorkflowModule } from './workflow/workflow.module';
     FilesModule,
     CommentsModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}

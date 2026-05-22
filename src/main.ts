@@ -1,4 +1,4 @@
-import { ValidationPipe } from '@nestjs/common';
+import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import {
   FastifyAdapter,
@@ -13,7 +13,8 @@ async function bootstrap() {
     new FastifyAdapter({ logger: true }),
   );
 
-  // Global validation — strip unknown properties, throw on bad input
+  app.enableCors();
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -22,21 +23,29 @@ async function bootstrap() {
     }),
   );
 
-  app.setGlobalPrefix('api/v1');
+  // Exclude root and health from the api/v1 prefix so they sit at bare /
+  app.setGlobalPrefix('api/v1', {
+    exclude: [
+      { path: '/', method: RequestMethod.GET },
+      { path: 'health', method: RequestMethod.GET },
+    ],
+  });
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Box Mailing API')
-    .setDescription('Internal workflow API for tracking mailing jobs')
-    .setVersion('1.0')
-    .addBearerAuth() // stub — replace with real auth in Phase 2
+    .setDescription('Internal workflow API for box mailing operations')
+    .setVersion('1.0.0')
+    .addBearerAuth()
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup('docs', app, document);
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port, '0.0.0.0');
-  console.log(`Box Mailing API running on port ${port}`);
+  console.log(`\nBox Mailing API listening on http://localhost:${port}`);
+  console.log(`Swagger docs:      http://localhost:${port}/docs`);
+  console.log(`API root:          http://localhost:${port}/api/v1\n`);
 }
 
 bootstrap();
