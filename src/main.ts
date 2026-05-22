@@ -8,6 +8,13 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
+  // BigInt (used by JobFile.sizeBytes) is not JSON-serializable by default.
+  // Serialize it as a string so the frontend can safely read it as Number.
+  (BigInt.prototype as unknown as Record<string, unknown>)['toJSON'] =
+    function () {
+      return this.toString();
+    };
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({ logger: true }),
