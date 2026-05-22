@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateJobFileDto } from './dto/create-job-file.dto';
+import { RenameFileDto } from './dto/rename-file.dto';
 
 @Injectable()
 export class FilesService {
@@ -96,10 +97,78 @@ export class FilesService {
 
   async getFileRevisions(parentFileId: string) {
     return this.prisma.jobFile.findMany({
-      where: {
-        parentFileId,
-      },
+      where: { parentFileId },
       orderBy: { version: 'asc' },
+    });
+  }
+
+  async getFileForDownload(fileId: string) {
+    const file = await this.prisma.jobFile.findUnique({
+      where: { id: fileId },
+      include: {
+        uploadedBy: { select: { id: true, name: true } },
+        stage: true,
+      },
+    });
+    if (!file) throw new NotFoundException(`File ${fileId} not found`);
+    return file;
+  }
+
+  async renameFile(fileId: string, dto: RenameFileDto) {
+    const file = await this.prisma.jobFile.findUnique({ where: { id: fileId } });
+    if (!file) throw new NotFoundException(`File ${fileId} not found`);
+
+    if (dto.actorId) {
+      const actor = await this.prisma.user.findUnique({ where: { id: dto.actorId } });
+      if (!actor) throw new NotFoundException(`User ${dto.actorId} not found`);
+      if (file.uploadedById !== dto.actorId && actor.role !== 'ADMIN') {
+        throw new ForbiddenException('Only the uploader or an admin can rename this file');
+      }
+    }
+
+    const updated = await this.prisma.jobFile.update({
+      where: { id: fileId },
+      data: { displayName: dto.displayName },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        entityType: 'JobFile',
+        entityId: fileId,
+        action: 'UPDATED',
+        jobId: file.jobId,
+        changedById: dto.actorId ?? null,
+        previousValue: { displayName: file.displayName },
+        newValue: { displayName: dto.displayName },
+      },
+    });
+
+    return updated;
+  }
+
+  async deleteFile(fileId: string, actorId?: string) {
+    const file = await this.prisma.jobFile.findUnique({ where: { id: fileId } });
+    if (!file) throw new NotFoundException(`File ${fileId} not found`);
+
+    if (actorId) {
+      const actor = await this.prisma.user.findUnique({ where: { id: actorId } });
+      if (!actor) throw new NotFoundException(`User ${actorId} not found`);
+      if (file.uploadedById !== actorId && actor.role !== 'ADMIN') {
+        throw new ForbiddenException('Only the uploader or an admin can delete this file');
+      }
+    }
+
+    await this.prisma.jobFile.delete({ where: { id: fileId } });
+
+    await this.prisma.auditLog.create({
+      data: {
+        entityType: 'JobFile',
+        entityId: fileId,
+        action: 'DELETED',
+        jobId: file.jobId,
+        changedById: actorId ?? null,
+        previousValue: { displayName: file.displayName },
+      },
     });
   }
 }

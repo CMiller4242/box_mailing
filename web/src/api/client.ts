@@ -6,6 +6,7 @@ import type {
   JobFile,
   MailingJobDetail,
   MailingJobSummary,
+  RenameFilePayload,
   StageHistory,
   TransitionPayload,
   User,
@@ -85,5 +86,18 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(body),
       }),
+    download: (jobId: string, fileId: string) =>
+      request<JobFile>(`/mailing-jobs/${jobId}/files/${fileId}/download`),
+    rename: (jobId: string, fileId: string, body: RenameFilePayload) =>
+      request<JobFile>(`/mailing-jobs/${jobId}/files/${fileId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    delete: (jobId: string, fileId: string, actorId?: string) => {
+      const qs = actorId ? `?actorId=${encodeURIComponent(actorId)}` : '';
+      return request<void>(`/mailing-jobs/${jobId}/files/${fileId}${qs}`, {
+        method: 'DELETE',
+      });
+    },
   },
 };

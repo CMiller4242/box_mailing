@@ -155,6 +155,11 @@ export interface AddFilePayload {
   stageId?: string;
 }
 
+export interface RenameFilePayload {
+  displayName: string;
+  actorId?: string;
+}
+
 export interface AddCommentPayload {
   content: string;
   authorId: string;

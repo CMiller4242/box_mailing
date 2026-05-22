@@ -383,6 +383,9 @@ tbody td {
 .file-name { font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .file-meta { font-size: 11px; color: var(--text-muted); }
 .file-approved { font-size: 11px; font-weight: 600; color: var(--success); }
+.file-actions { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+.file-action-btn { padding: 2px 7px !important; font-size: 13px !important; line-height: 1.4; }
+.file-action-danger:hover { background: var(--danger) !important; color: #fff !important; border-color: var(--danger) !important; }
 
 /* ── File upload zone ────────────────────────────────────────────────────── */
 .upload-zone {

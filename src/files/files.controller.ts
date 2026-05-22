@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -9,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CreateJobFileDto } from './dto/create-job-file.dto';
+import { RenameFileDto } from './dto/rename-file.dto';
 import { FilesService } from './files.service';
 
 @ApiTags('Files')
@@ -42,5 +46,27 @@ export class FilesController {
   @ApiOperation({ summary: 'List all revisions for a file' })
   getRevisions(@Param('fileId') fileId: string) {
     return this.filesService.getFileRevisions(fileId);
+  }
+
+  @Get(':fileId/download')
+  @ApiOperation({ summary: 'Get file metadata for download (binary storage wired separately)' })
+  downloadFile(@Param('fileId') fileId: string) {
+    return this.filesService.getFileForDownload(fileId);
+  }
+
+  @Patch(':fileId')
+  @ApiOperation({ summary: 'Rename a file (uploader or admin only)' })
+  renameFile(@Param('fileId') fileId: string, @Body() dto: RenameFileDto) {
+    return this.filesService.renameFile(fileId, dto);
+  }
+
+  @Delete(':fileId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a file record (uploader or admin only)' })
+  deleteFile(
+    @Param('fileId') fileId: string,
+    @Query('actorId') actorId?: string,
+  ) {
+    return this.filesService.deleteFile(fileId, actorId);
   }
 }
